@@ -30,6 +30,30 @@ Real-time multi-user drawing board built with React, Tailwind, and Socket.io.
 - Real-time stroke streaming (point-level), conflict-free ordering, and global undo/redo
 - Responsive canvas with Tailwind UI
 
+## File structure
+
+```
+collaborative-canvas/
+├── client/
+│   ├── index.html
+│   ├── main.jsx
+│   ├── App.jsx
+│   ├── style.css
+│   ├── vite.config.js
+│   └── components/
+│       └── CanvasBoard.jsx
+├── server/
+│   ├── server.js
+│   ├── rooms.js
+│   └── drawing-state.js
+├── ARCHITECTURE.md
+├── README.md
+├── package.json
+├── package-lock.json
+├── tailwind.config.js
+├── postcss.config.js
+```
+
 ## Known limitations
 - Canvas state is in-memory only; restart drops history.
 - Undo/redo works at stroke granularity, not per-segment.
