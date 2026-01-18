@@ -56,6 +56,12 @@ body {
   transition: background 0.3s ease, color 0.3s ease;
 }
 
+html,
+body {
+  height: 100%;
+  overflow: hidden;
+}
+
 .app-shell {
   background: var(--page-bg);
   color: var(--text-primary);

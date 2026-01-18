@@ -12,19 +12,22 @@ const scalePoint = (pt, dims) => ({ x: pt.x * dims.width, y: pt.y * dims.height 
 
 const drawLine = (ctx, stroke, from, to) => {
   if (!from || !to) return
-  const prev = ctx.globalCompositeOperation
+  ctx.save()
   if (stroke.tool === 'eraser') {
     ctx.globalCompositeOperation = 'destination-out'
+    ctx.setLineDash([Math.max(6, stroke.size * 0.6)])
+  } else {
+    ctx.setLineDash([])
   }
   ctx.lineJoin = 'round'
   ctx.lineCap = 'round'
   ctx.strokeStyle = stroke.color
-  ctx.lineWidth = stroke.size
+  ctx.lineWidth = stroke.tool === 'eraser' ? stroke.size * 1.35 : stroke.size
   ctx.beginPath()
   ctx.moveTo(from.x, from.y)
   ctx.lineTo(to.x, to.y)
   ctx.stroke()
-  ctx.globalCompositeOperation = prev
+  ctx.restore()
 }
 
 const replayStrokes = (ctx, strokes, dims) => {
