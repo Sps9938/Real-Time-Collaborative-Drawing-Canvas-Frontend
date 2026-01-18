@@ -41,7 +41,7 @@ const replayStrokes = (ctx, strokes, dims) => {
     })
 }
 
-export default function CanvasBoard({ socket, user, tool, color, size, onHistoryChange }) {
+export default function CanvasBoard({ socket, user, tool, color, size, theme, onHistoryChange }) {
   const canvasRef = useRef(null)
   const ctxRef = useRef(null)
   const dimsRef = useRef({ width: 0, height: 0 })
@@ -57,9 +57,10 @@ export default function CanvasBoard({ socket, user, tool, color, size, onHistory
   const cursorStyle = useMemo(() => {
     if (tool !== 'eraser') return 'crosshair'
     const r = Math.max(6, Math.min(size * 1.1, 28))
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${r * 2}" height="${r * 2}" viewBox="0 0 ${r * 2} ${r * 2}"><circle cx="${r}" cy="${r}" r="${r - 2}" fill="none" stroke="white" stroke-width="2"/></svg>`
+    const stroke = theme === 'light' ? '#0f172a' : '#ffffff'
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${r * 2}" height="${r * 2}" viewBox="0 0 ${r * 2} ${r * 2}"><circle cx="${r}" cy="${r}" r="${r - 2}" fill="none" stroke="${stroke}" stroke-width="2"/></svg>`
     return `url("data:image/svg+xml,${encodeURIComponent(svg)}") ${r} ${r}, crosshair`
-  }, [tool, size])
+  }, [tool, size, theme])
 
   const updateHistoryState = () => {
     onHistoryChange?.({ canUndo: strokesRef.current.length > 0, canRedo: undoneRef.current.length > 0 })
@@ -252,7 +253,7 @@ export default function CanvasBoard({ socket, user, tool, color, size, onHistory
   }, [dpr])
 
   return (
-    <div className="relative h-full w-full rounded-2xl bg-[radial-gradient(circle_at_40%_30%,rgba(6,182,212,0.08),rgba(14,165,233,0)_40%),#0b1222] shadow-card">
+    <div className="canvas-shell relative h-full w-full rounded-2xl shadow-card">
       <canvas ref={canvasRef} className="canvas-surface h-full w-full rounded-2xl" style={{ cursor: cursorStyle }} />
       <div className="pointer-events-none absolute inset-0">
         {cursors
@@ -260,7 +261,7 @@ export default function CanvasBoard({ socket, user, tool, color, size, onHistory
           .map(cursor => (
             <div
               key={cursor.userId}
-              className="cursor-chip text-xs text-slate-100"
+              className="cursor-chip text-xs"
               style={{ left: `${cursor.x}px`, top: `${cursor.y}px` }}
             >
               <span className="dot" style={{ background: cursor.color }}></span>
@@ -269,7 +270,7 @@ export default function CanvasBoard({ socket, user, tool, color, size, onHistory
           ))}
       </div>
       {!ready && (
-        <div className="absolute inset-0 flex items-center justify-center text-sm text-slate-300">
+        <div className="absolute inset-0 flex items-center justify-center text-sm text-muted">
           Connecting...
         </div>
       )}

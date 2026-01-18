@@ -2,6 +2,47 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --page-bg: radial-gradient(circle at 20% 20%, #0f172a 0, #0b1224 38%, #0b1222 70%);
+  --panel-bg: rgba(12, 18, 34, 0.72);
+  --panel-border: rgba(255, 255, 255, 0.07);
+  --section-bg: rgba(255, 255, 255, 0.06);
+  --section-border: rgba(255, 255, 255, 0.1);
+  --text-primary: #e5e7eb;
+  --text-muted: #94a3b8;
+  --chip-bg: rgba(12, 18, 34, 0.9);
+  --chip-border: rgba(255, 255, 255, 0.12);
+  --canvas-bg: radial-gradient(circle at 40% 30%, rgba(6, 182, 212, 0.08), rgba(14, 165, 233, 0) 40%), #0b1222;
+  --shadow-card: 0 18px 50px rgba(0, 0, 0, 0.45);
+  --control-bg: rgba(15, 23, 42, 0.7);
+  --control-border: rgba(255, 255, 255, 0.12);
+  --accent-strong: #22d3ee;
+  --accent-soft: rgba(34, 211, 238, 0.2);
+  --accent-border: rgba(34, 211, 238, 0.55);
+  --status-live: #34d399;
+  --status-off: #f59e0b;
+  --scrollbar-thumb: rgba(255, 255, 255, 0.16);
+  --ring-offset: rgba(0, 0, 0, 0.24);
+}
+
+body[data-theme='light'] {
+  --page-bg: radial-gradient(circle at 20% 20%, #e4f3ff 0, #f6f8ff 45%, #eff3ff 80%);
+  --panel-bg: rgba(255, 255, 255, 0.94);
+  --panel-border: rgba(15, 23, 42, 0.08);
+  --section-bg: rgba(255, 255, 255, 0.96);
+  --section-border: rgba(15, 23, 42, 0.12);
+  --text-primary: #0f172a;
+  --text-muted: #475569;
+  --chip-bg: rgba(255, 255, 255, 0.98);
+  --chip-border: rgba(15, 23, 42, 0.12);
+  --canvas-bg: radial-gradient(circle at 40% 30%, rgba(34, 211, 238, 0.12), rgba(14, 165, 233, 0) 40%), #f8fbff;
+  --shadow-card: 0 18px 40px rgba(15, 23, 42, 0.12);
+  --control-bg: rgba(255, 255, 255, 0.94);
+  --control-border: rgba(15, 23, 42, 0.12);
+  --scrollbar-thumb: rgba(0, 0, 0, 0.16);
+  --ring-offset: rgba(15, 23, 42, 0.08);
+}
+
 * {
   box-sizing: border-box;
 }
@@ -9,13 +50,24 @@
 body {
   margin: 0;
   min-height: 100vh;
-  background: radial-gradient(circle at 20% 20%, #0f172a 0, #0b1224 38%, #0b1222 70%);
-  color: #e5e7eb;
+  background: var(--page-bg);
+  color: var(--text-primary);
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  transition: background 0.3s ease, color 0.3s ease;
+}
+
+.app-shell {
+  background: var(--page-bg);
+  color: var(--text-primary);
+  transition: background 0.3s ease, color 0.3s ease;
 }
 
 .canvas-surface {
   touch-action: none;
+}
+
+.canvas-shell {
+  background: var(--canvas-bg);
 }
 
 .cursor-chip {
@@ -26,11 +78,13 @@ body {
   gap: 0.4rem;
   padding: 0.4rem 0.55rem;
   border-radius: 999px;
-  background: rgba(12, 18, 34, 0.9);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--chip-bg);
+  border: 1px solid var(--chip-border);
   backdrop-filter: blur(8px);
   pointer-events: none;
   white-space: nowrap;
+  color: var(--text-primary);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.12);
 }
 
 .cursor-chip .dot {
@@ -40,9 +94,74 @@ body {
 }
 
 .glass-panel {
-  background: rgba(12, 18, 34, 0.72);
-  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
   backdrop-filter: blur(12px);
+}
+
+.section {
+  background: var(--section-bg);
+  border: 1px solid var(--section-border);
+}
+
+.surface-button {
+  background: var(--control-bg);
+  border: 1px solid var(--control-border);
+  color: var(--text-primary);
+}
+
+.surface-button--active {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  border-color: var(--accent-border);
+}
+
+.surface-button--disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.hoverable:not(:disabled):hover {
+  border-color: var(--accent-border);
+  color: var(--accent-strong);
+}
+
+.theme-toggle {
+  background: var(--section-bg);
+  border-color: var(--section-border);
+}
+
+.text-muted {
+  color: var(--text-muted);
+}
+
+.badge-live {
+  color: var(--status-live);
+}
+
+.badge-off {
+  color: var(--status-off);
+}
+
+.bg-accent {
+  background: var(--accent-strong);
+}
+
+.color-swatch {
+  border-color: var(--control-border);
+}
+
+.color-swatch--active {
+  box-shadow: 0 0 0 2px var(--accent-strong), 0 0 0 4px var(--ring-offset);
+}
+
+.user-chip {
+  background: var(--control-bg);
+  border: 1px solid var(--control-border);
+}
+
+input[type='range'] {
+  accent-color: var(--accent-strong);
 }
 
 .scroll-thin::-webkit-scrollbar {
@@ -50,6 +169,6 @@ body {
 }
 
 .scroll-thin::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.12);
+  background: var(--scrollbar-thumb);
   border-radius: 999px;
 }

@@ -22,6 +22,12 @@ export default function App() {
   const [history, setHistory] = useState({ canUndo: false, canRedo: false })
   const [connected, setConnected] = useState(false)
   const [handle] = useState(randomHandle())
+  const [theme, setTheme] = useState(() => {
+    const stored = typeof window !== 'undefined' ? window.localStorage.getItem('rtc-canvas-theme') : null
+    if (stored === 'light' || stored === 'dark') return stored
+    if (typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: light)').matches) return 'light'
+    return 'dark'
+  })
 
   const serverUrl = useMemo(() => import.meta.env.VITE_SERVER_URL || 'http://localhost:3001', [])
 
@@ -56,42 +62,52 @@ export default function App() {
     return () => s.disconnect()
   }, [serverUrl, handle])
 
+  useEffect(() => {
+    document.body.dataset.theme = theme
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem('rtc-canvas-theme', theme)
+    }
+  }, [theme])
+
   const doUndo = () => socket?.emit('undo')
   const doRedo = () => socket?.emit('redo')
 
+  const toggleTheme = () => setTheme(prev => (prev === 'dark' ? 'light' : 'dark'))
+
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100">
+    <div className="app-shell min-h-screen">
       <div className="flex min-h-screen flex-col gap-6 px-4 py-6 md:flex-row">
         <aside className="glass-panel h-max w-full rounded-2xl p-4 shadow-card md:w-80">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 text-lg font-semibold">
-              <span className="h-3 w-3 rounded-full bg-cyan-400 shadow-[0_0_12px_rgba(34,211,238,0.8)]" />
+              <span className="h-3 w-3 rounded-full bg-accent shadow-[0_0_12px_rgba(34,211,238,0.55)]" />
               <span>Collaborative Canvas</span>
             </div>
-            <span className={`text-xs ${connected ? 'text-emerald-400' : 'text-amber-400'}`}>
-              {connected ? 'live' : 'offline'}
-            </span>
+            <div className="flex items-center gap-3">
+              <span className={`text-xs ${connected ? 'badge-live' : 'badge-off'}`}>
+                {connected ? 'live' : 'offline'}
+              </span>
+              <button className="surface-button theme-toggle rounded-full px-3 py-1 text-xs font-medium" onClick={toggleTheme}>
+                {theme === 'dark' ? '☀️ Light' : '🌙 Dark'}
+              </button>
+            </div>
           </div>
 
           <div className="mt-6 space-y-4">
-            <section className="rounded-xl border border-white/5 bg-white/5 p-4">
-              <div className="mb-3 flex items-center justify-between text-sm uppercase tracking-wide text-slate-400">
+            <section className="section rounded-xl p-4">
+              <div className="mb-3 flex items-center justify-between text-sm uppercase tracking-wide text-muted">
                 <span>Tools</span>
-                <span className="text-xs text-slate-500">{tool}</span>
+                <span className="text-xs text-muted">{tool}</span>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <button
-                  className={`rounded-lg border border-white/10 px-3 py-2 text-sm transition ${
-                    tool === 'pen' ? 'bg-cyan-500/20 text-cyan-200 border-cyan-400/40' : 'bg-slate-900/70'
-                  }`}
+                  className={`surface-button rounded-lg px-3 py-2 text-sm transition ${tool === 'pen' ? 'surface-button--active' : ''}`}
                   onClick={() => setTool('pen')}
                 >
                   Brush
                 </button>
                 <button
-                  className={`rounded-lg border border-white/10 px-3 py-2 text-sm transition ${
-                    tool === 'eraser' ? 'bg-cyan-500/20 text-cyan-200 border-cyan-400/40' : 'bg-slate-900/70'
-                  }`}
+                  className={`surface-button rounded-lg px-3 py-2 text-sm transition ${tool === 'eraser' ? 'surface-button--active' : ''}`}
                   onClick={() => setTool('eraser')}
                 >
                   Eraser
@@ -99,29 +115,28 @@ export default function App() {
               </div>
             </section>
 
-            <section className="rounded-xl border border-white/5 bg-white/5 p-4">
-              <div className="mb-3 flex items-center justify-between text-sm uppercase tracking-wide text-slate-400">
+            <section className="section rounded-xl p-4">
+              <div className="mb-3 flex items-center justify-between text-sm uppercase tracking-wide text-muted">
                 <span>Color</span>
-                <span className="text-xs text-slate-500">{color}</span>
+                <span className="text-xs text-muted">{color}</span>
               </div>
               <div className="grid grid-cols-4 gap-2">
                 {palette.map(hex => (
                   <button
                     key={hex}
-                    className={`h-10 rounded-lg border border-white/10 transition ${
-                      color === hex ? 'ring-2 ring-cyan-300 ring-offset-2 ring-offset-slate-900' : ''
-                    }`}
+                    className={`color-swatch h-10 rounded-lg border transition ${color === hex ? 'color-swatch--active' : ''}`}
                     style={{ background: hex }}
                     onClick={() => setColor(hex)}
+                    aria-label={`Select ${hex}`}
                   />
                 ))}
               </div>
             </section>
 
-            <section className="rounded-xl border border-white/5 bg-white/5 p-4">
-              <div className="mb-3 flex items-center justify-between text-sm uppercase tracking-wide text-slate-400">
+            <section className="section rounded-xl p-4">
+              <div className="mb-3 flex items-center justify-between text-sm uppercase tracking-wide text-muted">
                 <span>Stroke</span>
-                <span className="text-xs text-slate-500">{size}px</span>
+                <span className="text-xs text-muted">{size}px</span>
               </div>
               <input
                 type="range"
@@ -129,24 +144,20 @@ export default function App() {
                 max="32"
                 value={size}
                 onChange={e => setSize(Number(e.target.value))}
-                className="w-full accent-cyan-400"
+                className="w-full"
               />
             </section>
 
-            <section className="grid grid-cols-2 gap-3 rounded-xl border border-white/5 bg-white/5 p-4">
+            <section className="section grid grid-cols-2 gap-3 rounded-xl p-4">
               <button
-                className={`rounded-lg border border-white/10 px-3 py-2 text-sm transition ${
-                  history.canUndo ? 'bg-slate-900/70 hover:border-cyan-300/50 hover:text-cyan-100' : 'opacity-40'
-                }`}
+                className={`surface-button rounded-lg px-3 py-2 text-sm transition ${history.canUndo ? 'hoverable' : 'surface-button--disabled'}`}
                 onClick={doUndo}
                 disabled={!history.canUndo}
               >
                 Undo
               </button>
               <button
-                className={`rounded-lg border border-white/10 px-3 py-2 text-sm transition ${
-                  history.canRedo ? 'bg-slate-900/70 hover:border-cyan-300/50 hover:text-cyan-100' : 'opacity-40'
-                }`}
+                className={`surface-button rounded-lg px-3 py-2 text-sm transition ${history.canRedo ? 'hoverable' : 'surface-button--disabled'}`}
                 onClick={doRedo}
                 disabled={!history.canRedo}
               >
@@ -154,19 +165,19 @@ export default function App() {
               </button>
             </section>
 
-            <section className="rounded-xl border border-white/5 bg-white/5 p-4">
-              <div className="mb-3 flex items-center justify-between text-sm uppercase tracking-wide text-slate-400">
+            <section className="section rounded-xl p-4">
+              <div className="mb-3 flex items-center justify-between text-sm uppercase tracking-wide text-muted">
                 <span>Online ({users.length})</span>
-                <span className="text-xs text-slate-500">you as {handle}</span>
+                <span className="text-xs text-muted">you as {handle}</span>
               </div>
               <div className="scroll-thin grid max-h-32 grid-cols-1 gap-2 overflow-y-auto">
                 {users.map(u => (
-                  <div key={u.id} className="flex items-center justify-between rounded-lg bg-slate-900/60 px-3 py-2 text-sm">
+                  <div key={u.id} className="user-chip flex items-center justify-between rounded-lg px-3 py-2 text-sm">
                     <div className="flex items-center gap-2">
                       <span className="h-2.5 w-2.5 rounded-full" style={{ background: u.color }}></span>
-                      <span className="text-slate-200">{u.name}</span>
+                      <span>{u.name}</span>
                     </div>
-                    <span className="text-xs text-slate-500">{u.id === user?.id ? 'you' : 'live'}</span>
+                    <span className="text-xs text-muted">{u.id === user?.id ? 'you' : 'live'}</span>
                   </div>
                 ))}
               </div>
@@ -175,7 +186,7 @@ export default function App() {
         </aside>
 
         <main className="flex-1">
-          <CanvasBoard socket={socket} user={user} tool={tool} color={color} size={size} onHistoryChange={setHistory} />
+          <CanvasBoard socket={socket} user={user} tool={tool} color={color} size={size} theme={theme} onHistoryChange={setHistory} />
         </main>
       </div>
     </div>
