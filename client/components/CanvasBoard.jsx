@@ -21,13 +21,14 @@ const drawLine = (ctx, stroke, from, to) => {
     ctx.strokeStyle = 'rgba(255,255,255,0.85)'
   } else {
     ctx.setLineDash([])
-    ctx.shadowColor = stroke.color
-    ctx.shadowBlur = Math.min(12, stroke.size * 1.5)
+    ctx.shadowColor = 'transparent'
+    ctx.shadowBlur = 0
     ctx.strokeStyle = stroke.color
   }
   ctx.lineJoin = 'round'
   ctx.lineCap = 'round'
-  ctx.lineWidth = stroke.tool === 'eraser' ? stroke.size * 1.6 : stroke.size
+  const width = stroke.tool === 'eraser' ? stroke.size * 1.6 : Math.max(6, stroke.size)
+  ctx.lineWidth = width
   ctx.beginPath()
   ctx.moveTo(from.x, from.y)
   ctx.lineTo(to.x, to.y)
