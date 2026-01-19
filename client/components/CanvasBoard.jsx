@@ -14,15 +14,20 @@ const drawLine = (ctx, stroke, from, to) => {
   if (!from || !to) return
   ctx.save()
   if (stroke.tool === 'eraser') {
+    const dash = Math.max(10, stroke.size * 1.1)
+    const gap = Math.max(6, stroke.size * 0.7)
     ctx.globalCompositeOperation = 'destination-out'
-    ctx.setLineDash([Math.max(6, stroke.size * 0.6)])
+    ctx.setLineDash([dash, gap])
+    ctx.strokeStyle = 'rgba(255,255,255,0.85)'
   } else {
     ctx.setLineDash([])
+    ctx.shadowColor = stroke.color
+    ctx.shadowBlur = Math.min(12, stroke.size * 1.5)
+    ctx.strokeStyle = stroke.color
   }
   ctx.lineJoin = 'round'
   ctx.lineCap = 'round'
-  ctx.strokeStyle = stroke.color
-  ctx.lineWidth = stroke.tool === 'eraser' ? stroke.size * 1.35 : stroke.size
+  ctx.lineWidth = stroke.tool === 'eraser' ? stroke.size * 1.6 : stroke.size
   ctx.beginPath()
   ctx.moveTo(from.x, from.y)
   ctx.lineTo(to.x, to.y)
@@ -65,8 +70,11 @@ export default function CanvasBoard({ socket, user, tool, color, size, theme, on
     return `url("data:image/svg+xml,${encodeURIComponent(svg)}") ${r} ${r}, crosshair`
   }, [tool, size, theme])
 
-  const updateHistoryState = () => {
-    onHistoryChange?.({ canUndo: strokesRef.current.length > 0, canRedo: undoneRef.current.length > 0 })
+  const updateHistoryState = currentTool => {
+    const t = currentTool ?? tool
+    const canUndo = strokesRef.current.some(s => s.tool === t)
+    const canRedo = undoneRef.current.some(s => s.tool === t)
+    onHistoryChange?.({ canUndo, canRedo })
   }
 
   useEffect(() => {
