@@ -24,6 +24,7 @@ export default function App() {
   const [handle] = useState(randomHandle())
   const [room, setRoom] = useState('main')
   const [roomInput, setRoomInput] = useState('main')
+  const [imageSrc, setImageSrc] = useState(null)
   const [theme, setTheme] = useState(() => {
     const stored = typeof window !== 'undefined' ? window.localStorage.getItem('rtc-canvas-theme') : null
     if (stored === 'light' || stored === 'dark') return stored
@@ -32,6 +33,7 @@ export default function App() {
   })
   const canvasRef = useRef(null)
   const fileInputRef = useRef(null)
+  const imageFileRef = useRef(null)
 
   const serverUrl = useMemo(() => import.meta.env.VITE_SERVER_URL || 'http://localhost:3001', [])
 
@@ -114,6 +116,27 @@ export default function App() {
     evt.target.value = ''
   }
 
+  const handleImagePick = evt => {
+    const file = evt.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = e => {
+      const src = e.target?.result
+      if (!src) return
+      const img = new Image()
+      img.onload = () => {
+        const maxSide = 320
+        const scale = Math.min(1, maxSide / Math.max(img.width, img.height))
+        const width = Math.round(img.width * scale)
+        const height = Math.round(img.height * scale)
+        setImageSrc({ src, width, height })
+      }
+      img.src = src
+    }
+    reader.readAsDataURL(file)
+    evt.target.value = ''
+  }
+
   return (
     <div className="app-shell min-h-screen">
       <div className="flex min-h-screen flex-col gap-6 px-4 py-6 md:flex-row">
@@ -160,18 +183,31 @@ export default function App() {
                 <span className="text-xs text-muted">{tool}</span>
               </div>
               <div className="grid grid-cols-2 gap-3">
-                <button
-                  className={`surface-button rounded-lg px-3 py-2 text-sm transition ${tool === 'pen' ? 'surface-button--active' : ''}`}
-                  onClick={() => setTool('pen')}
-                >
-                  Brush
+                {[
+                  ['pen', 'Brush'],
+                  ['eraser', 'Eraser'],
+                  ['line', 'Line'],
+                  ['rect', 'Rectangle'],
+                  ['ellipse', 'Ellipse'],
+                  ['text', 'Text'],
+                  ['image', 'Image']
+                ].map(([value, label]) => (
+                  <button
+                    key={value}
+                    className={`surface-button rounded-lg px-3 py-2 text-sm transition ${tool === value ? 'surface-button--active' : ''}`}
+                    onClick={() => setTool(value)}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-muted">
+                <button className="surface-button rounded-lg px-3 py-2 text-sm hoverable" onClick={() => imageFileRef.current?.click()}>
+                  Load image
                 </button>
-                <button
-                  className={`surface-button rounded-lg px-3 py-2 text-sm transition ${tool === 'eraser' ? 'surface-button--active' : ''}`}
-                  onClick={() => setTool('eraser')}
-                >
-                  Eraser
-                </button>
+                <div className="flex items-center justify-end truncate" title={imageSrc?.src || 'No image loaded'}>
+                  {imageSrc ? `${imageSrc.width}×${imageSrc.height}` : 'No image'}
+                </div>
               </div>
             </section>
 
@@ -255,6 +291,7 @@ export default function App() {
             color={color}
             size={size}
             theme={theme}
+            imageSrc={imageSrc}
             onHistoryChange={setHistory}
           />
           <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
@@ -265,6 +302,7 @@ export default function App() {
               Import session
             </button>
             <input ref={fileInputRef} type="file" accept="application/json" className="hidden" onChange={handleImportFile} />
+            <input ref={imageFileRef} type="file" accept="image/*" className="hidden" onChange={handleImagePick} />
           </div>
         </main>
       </div>

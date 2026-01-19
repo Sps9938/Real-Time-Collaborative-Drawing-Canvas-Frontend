@@ -10,9 +10,14 @@ const toCanvasPoint = (evt, rect) => ({
 
 const scalePoint = (pt, dims) => ({ x: pt.x * dims.width, y: pt.y * dims.height })
 
-const drawLine = (ctx, stroke, from, to) => {
+const drawLine = (ctx, stroke, from, to, imageCache) => {
   if (!from || !to) return
   ctx.save()
+
+  const isShape = stroke.tool === 'rect' || stroke.tool === 'ellipse' || stroke.tool === 'line'
+  const isText = stroke.tool === 'text'
+  const isImage = stroke.tool === 'image'
+
   if (stroke.tool === 'eraser') {
     const dash = Math.max(10, stroke.size * 1.1)
     const gap = Math.max(6, stroke.size * 0.7)
@@ -24,11 +29,73 @@ const drawLine = (ctx, stroke, from, to) => {
     ctx.shadowColor = 'transparent'
     ctx.shadowBlur = 0
     ctx.strokeStyle = stroke.color
+    ctx.fillStyle = stroke.color
   }
   ctx.lineJoin = 'round'
   ctx.lineCap = 'round'
   const width = stroke.tool === 'eraser' ? stroke.size * 1.6 : Math.max(6, stroke.size)
   ctx.lineWidth = width
+
+  if (isText) {
+    const fontSize = Math.max(14, stroke.size * 4)
+    ctx.font = `${fontSize}px "Inter", system-ui, sans-serif`
+    ctx.textBaseline = 'top'
+    ctx.fillText(stroke.text || '', from.x, from.y)
+    ctx.restore()
+    return
+  }
+
+  if (isImage) {
+    const src = stroke.src
+    const w = stroke.width || 180
+    const h = stroke.height || 180
+    if (!src) {
+      ctx.restore()
+      return
+    }
+    const drawImg = img => {
+      ctx.drawImage(img, from.x, from.y, w, h)
+    }
+    const cached = imageCache.get(src)
+    if (cached && cached.complete) {
+      drawImg(cached)
+      ctx.restore()
+      return
+    }
+    const img = cached || new Image()
+    img.onload = () => {
+      imageCache.set(src, img)
+      drawImg(img)
+    }
+    if (!cached) {
+      img.src = src
+      imageCache.set(src, img)
+    }
+    ctx.restore()
+    return
+  }
+
+  if (isShape) {
+    const x = Math.min(from.x, to.x)
+    const y = Math.min(from.y, to.y)
+    const w = Math.abs(to.x - from.x)
+    const h = Math.abs(to.y - from.y)
+    ctx.beginPath()
+    if (stroke.tool === 'rect') {
+      ctx.rect(x, y, w, h)
+    } else if (stroke.tool === 'ellipse') {
+      const rx = w / 2
+      const ry = h / 2
+      ctx.ellipse(x + rx, y + ry, rx, ry, 0, 0, Math.PI * 2)
+    } else {
+      ctx.moveTo(from.x, from.y)
+      ctx.lineTo(to.x, to.y)
+    }
+    ctx.stroke()
+    ctx.restore()
+    return
+  }
+
   ctx.beginPath()
   ctx.moveTo(from.x, from.y)
   ctx.lineTo(to.x, to.y)
@@ -36,7 +103,7 @@ const drawLine = (ctx, stroke, from, to) => {
   ctx.restore()
 }
 
-const replayStrokes = (ctx, strokes, dims) => {
+const replayStrokes = (ctx, strokes, dims, imageCache) => {
   ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height)
   strokes
     .slice()
@@ -45,12 +112,15 @@ const replayStrokes = (ctx, strokes, dims) => {
       for (let i = 1; i < stroke.points.length; i += 1) {
         const from = scalePoint(stroke.points[i - 1], dims)
         const to = scalePoint(stroke.points[i], dims)
-        drawLine(ctx, stroke, from, to)
+        drawLine(ctx, stroke, from, to, imageCache)
       }
     })
 }
 
-const CanvasBoard = forwardRef(function CanvasBoard({ socket, user, tool, color, size, theme, onHistoryChange }, ref) {
+const CanvasBoard = forwardRef(function CanvasBoard(
+  { socket, user, tool, color, size, theme, imageSrc, onHistoryChange },
+  ref
+) {
   const canvasRef = useRef(null)
   const ctxRef = useRef(null)
   const dimsRef = useRef({ width: 0, height: 0 })
@@ -58,6 +128,7 @@ const CanvasBoard = forwardRef(function CanvasBoard({ socket, user, tool, color,
   const undoneRef = useRef([])
   const liveRef = useRef(new Map())
   const cursorRef = useRef(new Map())
+  const imageCacheRef = useRef(new Map())
   const [cursors, setCursors] = useState([])
   const [ready, setReady] = useState(false)
   const [metrics, setMetrics] = useState({ fps: 0, latency: null })
@@ -93,7 +164,7 @@ const CanvasBoard = forwardRef(function CanvasBoard({ socket, user, tool, color,
         points: stroke.points.map(p => ({ ...p }))
       }))
       undoneRef.current = []
-      replayStrokes(ctxRef.current, strokesRef.current, dimsRef.current)
+      replayStrokes(ctxRef.current, strokesRef.current, dimsRef.current, imageCacheRef.current)
       updateHistoryState()
     }
   }))
@@ -161,7 +232,7 @@ const CanvasBoard = forwardRef(function CanvasBoard({ socket, user, tool, color,
       undoneRef.current = []
       updateHistoryState()
       if (ctxRef.current) {
-        replayStrokes(ctxRef.current, strokesRef.current, dimsRef.current)
+        replayStrokes(ctxRef.current, strokesRef.current, dimsRef.current, imageCacheRef.current)
       }
       setReady(true)
     }
@@ -179,10 +250,13 @@ const CanvasBoard = forwardRef(function CanvasBoard({ socket, user, tool, color,
       const pts = payload.points || []
       pts.forEach(pt => {
         const last = live.points[live.points.length - 1]
-        const from = last ? scalePoint(last, dimsRef.current) : null
         const point = { x: pt.x, y: pt.y }
         const scaled = scalePoint(point, dimsRef.current)
-        drawLine(ctx, live, from, scaled)
+        const isStream = live.tool === 'pen' || live.tool === 'eraser'
+        if (isStream && last) {
+          const from = scalePoint(last, dimsRef.current)
+          drawLine(ctx, live, from, scaled, imageCacheRef.current)
+        }
         live.points.push(point)
       })
     }
@@ -191,6 +265,9 @@ const CanvasBoard = forwardRef(function CanvasBoard({ socket, user, tool, color,
       liveRef.current.delete(stroke.id)
       strokesRef.current.push(stroke)
       undoneRef.current = []
+      if (ctxRef.current) {
+        replayStrokes(ctxRef.current, strokesRef.current, dimsRef.current, imageCacheRef.current)
+      }
       updateHistoryState()
     }
 
@@ -200,7 +277,7 @@ const CanvasBoard = forwardRef(function CanvasBoard({ socket, user, tool, color,
       const [removed] = strokesRef.current.splice(idx, 1)
       undoneRef.current.push(removed)
       if (ctxRef.current) {
-        replayStrokes(ctxRef.current, strokesRef.current, dimsRef.current)
+        replayStrokes(ctxRef.current, strokesRef.current, dimsRef.current, imageCacheRef.current)
       }
       updateHistoryState()
     }
@@ -209,7 +286,7 @@ const CanvasBoard = forwardRef(function CanvasBoard({ socket, user, tool, color,
       strokesRef.current.push(stroke)
       undoneRef.current = undoneRef.current.filter(s => s.id !== stroke.id)
       if (ctxRef.current) {
-        replayStrokes(ctxRef.current, strokesRef.current, dimsRef.current)
+        replayStrokes(ctxRef.current, strokesRef.current, dimsRef.current, imageCacheRef.current)
       }
       updateHistoryState()
     }
@@ -254,12 +331,69 @@ const CanvasBoard = forwardRef(function CanvasBoard({ socket, user, tool, color,
     let stroke
 
     const rect = () => canvas.getBoundingClientRect()
+    const isShapeTool = tool === 'line' || tool === 'rect' || tool === 'ellipse'
+    const isTextTool = tool === 'text'
+    const isImageTool = tool === 'image'
 
     const handlePointerDown = evt => {
       if (!user) return
+      const bounds = rect()
+      const point = toCanvasPoint(evt, bounds)
+
+      if (isTextTool) {
+        const content = window.prompt('Enter text')
+        if (!content || !content.trim()) return
+        const text = content.trim()
+        const textStroke = {
+          id: uuid(),
+          userId: user.id,
+          tool: 'text',
+          color,
+          size,
+          text,
+          points: [point]
+        }
+        socket.emit('stroke:start', { strokeId: textStroke.id, tool: textStroke.tool, color, size, text })
+        socket.emit('stroke:points', { strokeId: textStroke.id, points: [point] })
+        socket.emit('stroke:end', { strokeId: textStroke.id })
+        strokesRef.current.push(textStroke)
+        replayStrokes(ctxRef.current, strokesRef.current, dimsRef.current, imageCacheRef.current)
+        updateHistoryState('text')
+        return
+      }
+
+      if (isImageTool) {
+        if (!imageSrc?.src) return
+        const imageStroke = {
+          id: uuid(),
+          userId: user.id,
+          tool: 'image',
+          color,
+          size,
+          src: imageSrc.src,
+          width: imageSrc.width,
+          height: imageSrc.height,
+          points: [point]
+        }
+        socket.emit('stroke:start', {
+          strokeId: imageStroke.id,
+          tool: imageStroke.tool,
+          color,
+          size,
+          src: imageStroke.src,
+          width: imageStroke.width,
+          height: imageStroke.height
+        })
+        socket.emit('stroke:points', { strokeId: imageStroke.id, points: [point] })
+        socket.emit('stroke:end', { strokeId: imageStroke.id })
+        strokesRef.current.push(imageStroke)
+        replayStrokes(ctxRef.current, strokesRef.current, dimsRef.current, imageCacheRef.current)
+        updateHistoryState('image')
+        return
+      }
+
       drawing = true
       canvas.setPointerCapture(evt.pointerId)
-      const point = toCanvasPoint(evt, rect())
       stroke = {
         id: uuid(),
         userId: user.id,
@@ -278,10 +412,28 @@ const CanvasBoard = forwardRef(function CanvasBoard({ socket, user, tool, color,
       socket.emit('cursor:move', { x: nx, y: ny })
       if (!drawing || !stroke) return
       const point = toCanvasPoint(evt, bounds)
+
+      if (isShapeTool) {
+        stroke.points[1] = point
+        replayStrokes(ctxRef.current, strokesRef.current, dimsRef.current, imageCacheRef.current)
+        const [start, end] = stroke.points
+        if (start && end) {
+          drawLine(
+            ctxRef.current,
+            stroke,
+            scalePoint(start, dimsRef.current),
+            scalePoint(end, dimsRef.current),
+            imageCacheRef.current
+          )
+        }
+        socket.emit('stroke:points', { strokeId: stroke.id, points: [point] })
+        return
+      }
+
       const last = stroke.points[stroke.points.length - 1]
       const from = last ? scalePoint(last, dimsRef.current) : null
       const scaled = scalePoint(point, dimsRef.current)
-      drawLine(ctxRef.current, stroke, from, scaled)
+      drawLine(ctxRef.current, stroke, from, scaled, imageCacheRef.current)
       stroke.points.push(point)
       socket.emit('stroke:points', { strokeId: stroke.id, points: [point] })
     }
@@ -289,6 +441,10 @@ const CanvasBoard = forwardRef(function CanvasBoard({ socket, user, tool, color,
     const endStroke = () => {
       if (!drawing || !stroke) return
       drawing = false
+      if (isShapeTool && stroke.points.length < 2) {
+        stroke = null
+        return
+      }
       socket.emit('stroke:end', { strokeId: stroke.id })
       liveRef.current.set(stroke.id, { ...stroke })
       stroke = null
@@ -305,7 +461,7 @@ const CanvasBoard = forwardRef(function CanvasBoard({ socket, user, tool, color,
       window.removeEventListener('pointerup', endStroke)
       canvas.removeEventListener('pointerleave', endStroke)
     }
-  }, [socket, user, tool, color, size, dpr])
+  }, [socket, user, tool, color, size, dpr, imageSrc])
 
   useEffect(() => {
     const handleResize = () => {
@@ -318,7 +474,7 @@ const CanvasBoard = forwardRef(function CanvasBoard({ socket, user, tool, color,
       const ctx = canvas.getContext('2d')
       ctxRef.current = ctx
       ctx.scale(dpr, dpr)
-      replayStrokes(ctxRef.current, strokesRef.current, dimsRef.current)
+      replayStrokes(ctxRef.current, strokesRef.current, dimsRef.current, imageCacheRef.current)
     }
     window.addEventListener('resize', handleResize)
     return () => window.removeEventListener('resize', handleResize)
