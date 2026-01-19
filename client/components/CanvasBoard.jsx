@@ -150,10 +150,9 @@ const CanvasBoard = forwardRef(function CanvasBoard(
     return `url("data:image/svg+xml,${encodeURIComponent(svg)}") ${r} ${r}, crosshair`
   }, [tool, size, theme])
 
-  const updateHistoryState = currentTool => {
-    const t = currentTool ?? tool
-    const canUndo = strokesRef.current.some(s => s.tool === t)
-    const canRedo = undoneRef.current.some(s => s.tool === t)
+  const updateHistoryState = () => {
+    const canUndo = strokesRef.current.length > 0
+    const canRedo = undoneRef.current.length > 0
     onHistoryChange?.({ canUndo, canRedo })
   }
 
@@ -272,13 +271,34 @@ const CanvasBoard = forwardRef(function CanvasBoard(
       pts.forEach(pt => {
         const last = live.points[live.points.length - 1]
         const point = { x: pt.x, y: pt.y }
-        const scaled = scalePoint(point, dimsRef.current)
         const isStream = live.tool === 'pen' || live.tool === 'eraser'
-        if (isStream && last) {
-          const from = scalePoint(last, dimsRef.current)
-          drawLine(ctx, live, from, scaled, imageCacheRef.current)
+        const isShape = live.tool === 'line' || live.tool === 'rect' || live.tool === 'ellipse'
+        const isSingle = live.tool === 'image' || live.tool === 'text'
+
+        if (isStream) {
+          const scaled = scalePoint(point, dimsRef.current)
+          if (last) {
+            const from = scalePoint(last, dimsRef.current)
+            drawLine(ctx, live, from, scaled, imageCacheRef.current)
+          }
+          live.points.push(point)
+          return
         }
-        live.points.push(point)
+
+        if (isShape) {
+          const start = live.points[0] || point
+          live.points = [start, point]
+          const preview = [...strokesRef.current, live]
+          replayStrokes(ctx, preview, dimsRef.current, imageCacheRef.current)
+          return
+        }
+
+        if (isSingle) {
+          live.points = [point]
+          const preview = [...strokesRef.current, live]
+          replayStrokes(ctx, preview, dimsRef.current, imageCacheRef.current)
+          return
+        }
       })
     }
 
@@ -384,18 +404,29 @@ const CanvasBoard = forwardRef(function CanvasBoard(
 
       if (isImageTool) {
         if (!imageSrc?.src) return
-        const id = uuid()
-        socket.emit('stroke:start', {
-          strokeId: id,
+        drawing = true
+        canvas.setPointerCapture(evt.pointerId)
+        stroke = {
+          id: uuid(),
+          userId: user.id,
           tool: 'image',
           color,
           size,
           src: imageSrc.src,
           width: imageSrc.width,
-          height: imageSrc.height
+          height: imageSrc.height,
+          points: [point]
+        }
+        socket.emit('stroke:start', {
+          strokeId: stroke.id,
+          tool: stroke.tool,
+          color,
+          size,
+          src: stroke.src,
+          width: stroke.width,
+          height: stroke.height
         })
-        socket.emit('stroke:points', { strokeId: id, points: [point] })
-        socket.emit('stroke:end', { strokeId: id })
+        socket.emit('stroke:points', { strokeId: stroke.id, points: [point] })
         return
       }
 
@@ -422,17 +453,16 @@ const CanvasBoard = forwardRef(function CanvasBoard(
 
       if (isShapeTool) {
         stroke.points[1] = point
-        replayStrokes(ctxRef.current, strokesRef.current, dimsRef.current, imageCacheRef.current)
-        const [start, end] = stroke.points
-        if (start && end) {
-          drawLine(
-            ctxRef.current,
-            stroke,
-            scalePoint(start, dimsRef.current),
-            scalePoint(end, dimsRef.current),
-            imageCacheRef.current
-          )
-        }
+        const preview = [...strokesRef.current, stroke]
+        replayStrokes(ctxRef.current, preview, dimsRef.current, imageCacheRef.current)
+        socket.emit('stroke:points', { strokeId: stroke.id, points: [point] })
+        return
+      }
+
+      if (isImageTool) {
+        stroke.points = [point]
+        const preview = [...strokesRef.current, stroke]
+        replayStrokes(ctxRef.current, preview, dimsRef.current, imageCacheRef.current)
         socket.emit('stroke:points', { strokeId: stroke.id, points: [point] })
         return
       }
