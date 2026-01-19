@@ -83,6 +83,7 @@ export default function App() {
 
   const doUndo = () => socket?.emit('undo')
   const doRedo = () => socket?.emit('redo')
+  const doClear = () => socket?.emit('clear')
 
   const toggleTheme = () => setTheme(prev => (prev === 'dark' ? 'light' : 'dark'))
 
@@ -258,6 +259,15 @@ export default function App() {
                 disabled={!history.canRedo}
               >
                 Redo
+              </button>
+            </section>
+
+            <section className="section rounded-xl p-4">
+              <div className="mb-2 flex items-center justify-between text-sm uppercase tracking-wide text-muted">
+                <span>Reset</span>
+              </div>
+              <button className="surface-button rounded-lg px-3 py-2 text-sm hoverable w-full" onClick={doClear}>
+                Clear canvas for room
               </button>
             </section>
 
