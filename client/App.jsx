@@ -83,7 +83,10 @@ export default function App() {
 
   const doUndo = () => socket?.emit('undo')
   const doRedo = () => socket?.emit('redo')
-  const doClear = () => socket?.emit('clear')
+  const doClear = () => {
+    canvasRef.current?.clearCanvas()
+    socket?.emit('clear')
+  }
 
   const toggleTheme = () => setTheme(prev => (prev === 'dark' ? 'light' : 'dark'))
 

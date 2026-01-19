@@ -157,6 +157,18 @@ const CanvasBoard = forwardRef(function CanvasBoard(
     onHistoryChange?.({ canUndo, canRedo })
   }
 
+  const clearLocal = () => {
+    strokesRef.current = []
+    undoneRef.current = []
+    liveRef.current.clear()
+    cursorRef.current.clear()
+    setCursors([])
+    if (ctxRef.current) {
+      ctxRef.current.clearRect(0, 0, ctxRef.current.canvas.width, ctxRef.current.canvas.height)
+    }
+    updateHistoryState()
+  }
+
   useImperativeHandle(ref, () => ({
     exportSession: () => ({
       strokes: strokesRef.current.map(stroke => ({
@@ -173,7 +185,8 @@ const CanvasBoard = forwardRef(function CanvasBoard(
       undoneRef.current = []
       replayStrokes(ctxRef.current, strokesRef.current, dimsRef.current, imageCacheRef.current)
       updateHistoryState()
-    }
+    },
+    clearCanvas: clearLocal
   }))
 
   useEffect(() => {
@@ -235,7 +248,8 @@ const CanvasBoard = forwardRef(function CanvasBoard(
         const rect = canvasRef.current.getBoundingClientRect()
         dimsRef.current = { width: rect.width, height: rect.height }
       }
-      strokesRef.current = payload.strokes || []
+      const incoming = Array.isArray(payload.strokes) ? payload.strokes : []
+      strokesRef.current = incoming
       undoneRef.current = []
       updateHistoryState()
       if (ctxRef.current) {
@@ -316,15 +330,7 @@ const CanvasBoard = forwardRef(function CanvasBoard(
     }
 
     const handleClear = () => {
-      strokesRef.current = []
-      undoneRef.current = []
-      liveRef.current.clear()
-      cursorRef.current.clear()
-      setCursors([])
-      if (ctxRef.current) {
-        ctxRef.current.clearRect(0, 0, ctxRef.current.canvas.width, ctxRef.current.canvas.height)
-      }
-      updateHistoryState()
+      clearLocal()
     }
 
     socket.on('init', handleInit)
