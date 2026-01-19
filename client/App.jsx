@@ -295,6 +295,10 @@ export default function App() {
         </aside>
 
         <main className="flex-1">
+          <div className="mb-3 flex items-center justify-between">
+            <div className="text-lg font-semibold">Canvas</div>
+            <div className="text-xs text-muted">Room: {room}</div>
+          </div>
           <CanvasBoard
             key={room}
             ref={canvasRef}
