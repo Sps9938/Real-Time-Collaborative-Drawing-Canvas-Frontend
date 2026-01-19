@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
 import { v4 as uuid } from 'uuid'
 
 const clamp01 = n => Math.min(1, Math.max(0, n))
@@ -50,7 +50,7 @@ const replayStrokes = (ctx, strokes, dims) => {
     })
 }
 
-export default function CanvasBoard({ socket, user, tool, color, size, theme, onHistoryChange }) {
+const CanvasBoard = forwardRef(function CanvasBoard({ socket, user, tool, color, size, theme, onHistoryChange }, ref) {
   const canvasRef = useRef(null)
   const ctxRef = useRef(null)
   const dimsRef = useRef({ width: 0, height: 0 })
@@ -60,6 +60,7 @@ export default function CanvasBoard({ socket, user, tool, color, size, theme, on
   const cursorRef = useRef(new Map())
   const [cursors, setCursors] = useState([])
   const [ready, setReady] = useState(false)
+  const [metrics, setMetrics] = useState({ fps: 0, latency: null })
 
   const dpr = useMemo(() => Math.min(window.devicePixelRatio || 1, 2), [])
 
@@ -78,6 +79,25 @@ export default function CanvasBoard({ socket, user, tool, color, size, theme, on
     onHistoryChange?.({ canUndo, canRedo })
   }
 
+  useImperativeHandle(ref, () => ({
+    exportSession: () => ({
+      strokes: strokesRef.current.map(stroke => ({
+        ...stroke,
+        points: stroke.points.map(p => ({ ...p }))
+      }))
+    }),
+    importSession: payload => {
+      if (!payload?.strokes || !ctxRef.current) return
+      strokesRef.current = payload.strokes.map(stroke => ({
+        ...stroke,
+        points: stroke.points.map(p => ({ ...p }))
+      }))
+      undoneRef.current = []
+      replayStrokes(ctxRef.current, strokesRef.current, dimsRef.current)
+      updateHistoryState()
+    }
+  }))
+
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
@@ -89,6 +109,46 @@ export default function CanvasBoard({ socket, user, tool, color, size, theme, on
     ctxRef.current = ctx
     ctx.scale(dpr, dpr)
   }, [dpr])
+
+  useEffect(() => {
+    let frameId
+    let frames = 0
+    let last = performance.now()
+
+    const tick = () => {
+      const now = performance.now()
+      frames += 1
+      if (now - last >= 1000) {
+        const fps = Math.round((frames * 1000) / (now - last))
+        setMetrics(prev => ({ ...prev, fps }))
+        frames = 0
+        last = now
+      }
+      frameId = requestAnimationFrame(tick)
+    }
+
+    frameId = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(frameId)
+  }, [])
+
+  useEffect(() => {
+    if (!socket) return
+    const handlePong = payload => {
+      if (!payload?.ts) return
+      const rtt = Math.round(performance.now() - payload.ts)
+      setMetrics(prev => ({ ...prev, latency: rtt }))
+    }
+
+    const timer = setInterval(() => {
+      socket.emit('ping', { ts: performance.now() })
+    }, 2000)
+
+    socket.on('pong', handlePong)
+    return () => {
+      clearInterval(timer)
+      socket.off('pong', handlePong)
+    }
+  }, [socket])
 
   useEffect(() => {
     if (!socket) return
@@ -266,6 +326,10 @@ export default function CanvasBoard({ socket, user, tool, color, size, theme, on
 
   return (
     <div className="canvas-shell relative h-full w-full rounded-2xl shadow-card">
+      <div className="metrics-chip">
+        <span>FPS {metrics.fps}</span>
+        <span>RTT {metrics.latency ?? '—'}ms</span>
+      </div>
       <canvas ref={canvasRef} className="canvas-surface h-full w-full rounded-2xl" style={{ cursor: cursorStyle }} />
       <div className="pointer-events-none absolute inset-0">
         {cursors
@@ -288,4 +352,6 @@ export default function CanvasBoard({ socket, user, tool, color, size, theme, on
       )}
     </div>
   )
-}
+})
+
+export default CanvasBoard

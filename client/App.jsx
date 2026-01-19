@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { io } from 'socket.io-client'
 import CanvasBoard from './components/CanvasBoard.jsx'
 
@@ -22,12 +22,16 @@ export default function App() {
   const [history, setHistory] = useState({ canUndo: false, canRedo: false })
   const [connected, setConnected] = useState(false)
   const [handle] = useState(randomHandle())
+  const [room, setRoom] = useState('main')
+  const [roomInput, setRoomInput] = useState('main')
   const [theme, setTheme] = useState(() => {
     const stored = typeof window !== 'undefined' ? window.localStorage.getItem('rtc-canvas-theme') : null
     if (stored === 'light' || stored === 'dark') return stored
     if (typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: light)').matches) return 'light'
     return 'dark'
   })
+  const canvasRef = useRef(null)
+  const fileInputRef = useRef(null)
 
   const serverUrl = useMemo(() => import.meta.env.VITE_SERVER_URL || 'http://localhost:3001', [])
 
@@ -57,10 +61,16 @@ export default function App() {
       setUsers(prev => prev.filter(u => u.id !== payload.userId))
     })
 
-    s.emit('join', { name: handle })
-
     return () => s.disconnect()
   }, [serverUrl, handle])
+
+  useEffect(() => {
+    if (!socket) return
+    setUser(null)
+    setUsers([])
+    setHistory({ canUndo: false, canRedo: false })
+    socket.emit('join', { name: handle, room })
+  }, [socket, room, handle])
 
   useEffect(() => {
     document.body.dataset.theme = theme
@@ -73,6 +83,36 @@ export default function App() {
   const doRedo = () => socket?.emit('redo')
 
   const toggleTheme = () => setTheme(prev => (prev === 'dark' ? 'light' : 'dark'))
+
+  const handleExport = () => {
+    const data = canvasRef.current?.exportSession()
+    if (!data) return
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `canvas-${room}-${Date.now()}.json`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const handleImportClick = () => fileInputRef.current?.click()
+
+  const handleImportFile = evt => {
+    const file = evt.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = e => {
+      try {
+        const parsed = JSON.parse(e.target?.result)
+        canvasRef.current?.importSession(parsed)
+      } catch (err) {
+        console.error('Failed to import session', err)
+      }
+    }
+    reader.readAsText(file)
+    evt.target.value = ''
+  }
 
   return (
     <div className="app-shell min-h-screen">
@@ -89,6 +129,26 @@ export default function App() {
               </span>
               <button className="surface-button theme-toggle rounded-full px-3 py-1 text-xs font-medium" onClick={toggleTheme}>
                 {theme === 'dark' ? '☀️ Light' : '🌙 Dark'}
+              </button>
+            </div>
+          </div>
+
+          <div className="mt-4">
+            <div className="mb-2 flex items-center justify-between text-sm uppercase tracking-wide text-muted">
+              <span>Room</span>
+              <span className="text-xs text-muted">{room}</span>
+            </div>
+            <div className="flex gap-2">
+              <input
+                className="surface-button w-full rounded-lg px-3 py-2 text-sm"
+                value={roomInput}
+                onChange={e => setRoomInput(e.target.value)}
+              />
+              <button
+                className="surface-button rounded-lg px-3 py-2 text-sm hoverable"
+                onClick={() => setRoom(roomInput.toLowerCase().trim() || 'main')}
+              >
+                Join
               </button>
             </div>
           </div>
@@ -186,7 +246,26 @@ export default function App() {
         </aside>
 
         <main className="flex-1">
-          <CanvasBoard socket={socket} user={user} tool={tool} color={color} size={size} theme={theme} onHistoryChange={setHistory} />
+          <CanvasBoard
+            key={room}
+            ref={canvasRef}
+            socket={socket}
+            user={user}
+            tool={tool}
+            color={color}
+            size={size}
+            theme={theme}
+            onHistoryChange={setHistory}
+          />
+          <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
+            <button className="surface-button rounded-lg px-3 py-2 text-sm hoverable" onClick={handleExport}>
+              Export session
+            </button>
+            <button className="surface-button rounded-lg px-3 py-2 text-sm hoverable" onClick={handleImportClick}>
+              Import session
+            </button>
+            <input ref={fileInputRef} type="file" accept="application/json" className="hidden" onChange={handleImportFile} />
+          </div>
         </main>
       </div>
     </div>
