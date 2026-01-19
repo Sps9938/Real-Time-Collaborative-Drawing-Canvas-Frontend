@@ -11,7 +11,8 @@ const toCanvasPoint = (evt, rect) => ({
 const scalePoint = (pt, dims) => ({ x: pt.x * dims.width, y: pt.y * dims.height })
 
 const drawLine = (ctx, stroke, from, to, imageCache) => {
-  if (!from || !to) return
+  if (!from) return
+  const target = to || from
   ctx.save()
 
   const isShape = stroke.tool === 'rect' || stroke.tool === 'ellipse' || stroke.tool === 'line'
@@ -40,7 +41,7 @@ const drawLine = (ctx, stroke, from, to, imageCache) => {
     const fontSize = Math.max(14, stroke.size * 4)
     ctx.font = `${fontSize}px "Inter", system-ui, sans-serif`
     ctx.textBaseline = 'top'
-    ctx.fillText(stroke.text || '', from.x, from.y)
+    ctx.fillText(stroke.text || '', target.x, target.y)
     ctx.restore()
     return
   }
@@ -54,7 +55,7 @@ const drawLine = (ctx, stroke, from, to, imageCache) => {
       return
     }
     const drawImg = img => {
-      ctx.drawImage(img, from.x, from.y, w, h)
+      ctx.drawImage(img, target.x, target.y, w, h)
     }
     const cached = imageCache.get(src)
     if (cached && cached.complete) {
@@ -76,10 +77,10 @@ const drawLine = (ctx, stroke, from, to, imageCache) => {
   }
 
   if (isShape) {
-    const x = Math.min(from.x, to.x)
-    const y = Math.min(from.y, to.y)
-    const w = Math.abs(to.x - from.x)
-    const h = Math.abs(to.y - from.y)
+    const x = Math.min(from.x, target.x)
+    const y = Math.min(from.y, target.y)
+    const w = Math.abs(target.x - from.x)
+    const h = Math.abs(target.y - from.y)
     ctx.beginPath()
     if (stroke.tool === 'rect') {
       ctx.rect(x, y, w, h)
@@ -89,7 +90,7 @@ const drawLine = (ctx, stroke, from, to, imageCache) => {
       ctx.ellipse(x + rx, y + ry, rx, ry, 0, 0, Math.PI * 2)
     } else {
       ctx.moveTo(from.x, from.y)
-      ctx.lineTo(to.x, to.y)
+      ctx.lineTo(target.x, target.y)
     }
     ctx.stroke()
     ctx.restore()
@@ -98,7 +99,7 @@ const drawLine = (ctx, stroke, from, to, imageCache) => {
 
   ctx.beginPath()
   ctx.moveTo(from.x, from.y)
-  ctx.lineTo(to.x, to.y)
+  ctx.lineTo(target.x, target.y)
   ctx.stroke()
   ctx.restore()
 }
@@ -109,9 +110,15 @@ const replayStrokes = (ctx, strokes, dims, imageCache) => {
     .slice()
     .sort((a, b) => a.seq - b.seq)
     .forEach(stroke => {
-      for (let i = 1; i < stroke.points.length; i += 1) {
-        const from = scalePoint(stroke.points[i - 1], dims)
-        const to = scalePoint(stroke.points[i], dims)
+      const pts = stroke.points || []
+      if (pts.length === 1) {
+        const p = scalePoint(pts[0], dims)
+        drawLine(ctx, stroke, p, p, imageCache)
+        return
+      }
+      for (let i = 1; i < pts.length; i += 1) {
+        const from = scalePoint(pts[i - 1], dims)
+        const to = scalePoint(pts[i], dims)
         drawLine(ctx, stroke, from, to, imageCache)
       }
     })
@@ -263,7 +270,11 @@ const CanvasBoard = forwardRef(function CanvasBoard(
 
     const handleStrokeCommit = stroke => {
       liveRef.current.delete(stroke.id)
-      strokesRef.current.push(stroke)
+      // Avoid duplicates if the stroke already exists (should not, but guard for latency)
+      const exists = strokesRef.current.some(s => s.id === stroke.id)
+      if (!exists) {
+        strokesRef.current.push(stroke)
+      }
       undoneRef.current = []
       if (ctxRef.current) {
         replayStrokes(ctxRef.current, strokesRef.current, dimsRef.current, imageCacheRef.current)
@@ -344,51 +355,27 @@ const CanvasBoard = forwardRef(function CanvasBoard(
         const content = window.prompt('Enter text')
         if (!content || !content.trim()) return
         const text = content.trim()
-        const textStroke = {
-          id: uuid(),
-          userId: user.id,
-          tool: 'text',
-          color,
-          size,
-          text,
-          points: [point]
-        }
-        socket.emit('stroke:start', { strokeId: textStroke.id, tool: textStroke.tool, color, size, text })
-        socket.emit('stroke:points', { strokeId: textStroke.id, points: [point] })
-        socket.emit('stroke:end', { strokeId: textStroke.id })
-        strokesRef.current.push(textStroke)
-        replayStrokes(ctxRef.current, strokesRef.current, dimsRef.current, imageCacheRef.current)
-        updateHistoryState('text')
+        const id = uuid()
+        socket.emit('stroke:start', { strokeId: id, tool: 'text', color, size, text })
+        socket.emit('stroke:points', { strokeId: id, points: [point] })
+        socket.emit('stroke:end', { strokeId: id })
         return
       }
 
       if (isImageTool) {
         if (!imageSrc?.src) return
-        const imageStroke = {
-          id: uuid(),
-          userId: user.id,
+        const id = uuid()
+        socket.emit('stroke:start', {
+          strokeId: id,
           tool: 'image',
           color,
           size,
           src: imageSrc.src,
           width: imageSrc.width,
-          height: imageSrc.height,
-          points: [point]
-        }
-        socket.emit('stroke:start', {
-          strokeId: imageStroke.id,
-          tool: imageStroke.tool,
-          color,
-          size,
-          src: imageStroke.src,
-          width: imageStroke.width,
-          height: imageStroke.height
+          height: imageSrc.height
         })
-        socket.emit('stroke:points', { strokeId: imageStroke.id, points: [point] })
-        socket.emit('stroke:end', { strokeId: imageStroke.id })
-        strokesRef.current.push(imageStroke)
-        replayStrokes(ctxRef.current, strokesRef.current, dimsRef.current, imageCacheRef.current)
-        updateHistoryState('image')
+        socket.emit('stroke:points', { strokeId: id, points: [point] })
+        socket.emit('stroke:end', { strokeId: id })
         return
       }
 
