@@ -315,6 +315,18 @@ const CanvasBoard = forwardRef(function CanvasBoard(
       setCursors(Array.from(cursorRef.current.values()))
     }
 
+    const handleClear = () => {
+      strokesRef.current = []
+      undoneRef.current = []
+      liveRef.current.clear()
+      cursorRef.current.clear()
+      setCursors([])
+      if (ctxRef.current) {
+        ctxRef.current.clearRect(0, 0, ctxRef.current.canvas.width, ctxRef.current.canvas.height)
+      }
+      updateHistoryState()
+    }
+
     socket.on('init', handleInit)
     socket.on('stroke:start', handleStrokeStart)
     socket.on('stroke:points', handleStrokePoints)
@@ -322,6 +334,7 @@ const CanvasBoard = forwardRef(function CanvasBoard(
     socket.on('stroke:undo', handleUndo)
     socket.on('stroke:redo', handleRedo)
     socket.on('cursor', handleCursor)
+    socket.on('clear', handleClear)
 
     return () => {
       socket.off('init', handleInit)
@@ -331,6 +344,7 @@ const CanvasBoard = forwardRef(function CanvasBoard(
       socket.off('stroke:undo', handleUndo)
       socket.off('stroke:redo', handleRedo)
       socket.off('cursor', handleCursor)
+      socket.off('clear', handleClear)
     }
   }, [socket, dpr, onHistoryChange])
 
