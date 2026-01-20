@@ -2,7 +2,9 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { io } from 'socket.io-client'
 import CanvasBoard from './components/CanvasBoard.jsx'
 
-const palette = ['#06b6d4', '#f472b6', '#a78bfa', '#22d3ee', '#f97316', '#10b981', '#ef4444', '#eab308']
+const paletteBaseDark = ['#06b6d4', '#f472b6', '#a78bfa', '#22d3ee', '#f97316', '#10b981', '#ef4444', '#eab308']
+const paletteBaseLight = ['#0f172a', '#2563eb', '#7c3aed', '#ea580c', '#b91c1c', '#0f766e', '#15803d', '#111827']
+const paletteExtra = ['#0ea5e9', '#8b5cf6', '#ec4899', '#14b8a6', '#22c55e', '#84cc16', '#facc15', '#fb923c', '#f43f5e', '#38bdf8', '#a3e635', '#e879f9']
 
 const randomHandle = () => {
   const adjectives = ['bold', 'calm', 'loud', 'bright', 'swift', 'steady', 'lucky', 'brisk']
@@ -17,7 +19,7 @@ export default function App() {
   const [user, setUser] = useState(null)
   const [users, setUsers] = useState([])
   const [tool, setTool] = useState('pen')
-  const [color, setColor] = useState(palette[0])
+  const [color, setColor] = useState(paletteBaseDark[0])
   const [size, setSize] = useState(6)
   const [history, setHistory] = useState({ canUndo: false, canRedo: false })
   const [connected, setConnected] = useState(false)
@@ -31,9 +33,20 @@ export default function App() {
     if (typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: light)').matches) return 'light'
     return 'dark'
   })
+  const [showAllColors, setShowAllColors] = useState(false)
   const canvasRef = useRef(null)
   const fileInputRef = useRef(null)
   const imageFileRef = useRef(null)
+
+  const paletteBase = useMemo(() => (theme === 'light' ? paletteBaseLight : paletteBaseDark), [theme])
+  const paletteAll = useMemo(
+    () => [...new Set([...paletteBaseDark, ...paletteBaseLight, ...paletteExtra])],
+    []
+  )
+
+  useEffect(() => {
+    setColor(prev => (paletteBase.includes(prev) || paletteExtra.includes(prev) ? prev : paletteBase[0]))
+  }, [paletteBase])
 
   const serverUrl = useMemo(() => import.meta.env.VITE_SERVER_URL || 'http://localhost:3001', [])
 
@@ -144,7 +157,7 @@ export default function App() {
   return (
     <div className="app-shell min-h-screen">
       <div className="flex min-h-screen flex-col gap-6 px-4 py-6 md:flex-row">
-        <aside className="glass-panel h-max w-full rounded-2xl p-4 shadow-card md:w-80">
+        <aside className="glass-panel w-full rounded-2xl p-4 shadow-card md:w-80 md:max-h-[calc(100vh-48px)] md:overflow-y-auto scroll-thin scroll-smooth">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 text-lg font-semibold">
               <span className="h-3 w-3 rounded-full bg-accent shadow-[0_0_12px_rgba(34,211,238,0.55)]" />
@@ -221,7 +234,7 @@ export default function App() {
                 <span className="text-xs text-muted">{color}</span>
               </div>
               <div className="grid grid-cols-4 gap-2">
-                {palette.map(hex => (
+                {(showAllColors ? paletteAll : paletteBase).map(hex => (
                   <button
                     key={hex}
                     className={`color-swatch h-10 rounded-lg border transition ${color === hex ? 'color-swatch--active' : ''}`}
@@ -231,6 +244,12 @@ export default function App() {
                   />
                 ))}
               </div>
+              <button
+                className="surface-button mt-3 w-full rounded-lg px-3 py-2 text-sm hoverable"
+                onClick={() => setShowAllColors(prev => !prev)}
+              >
+                {showAllColors ? 'Show fewer colors' : 'Show all colors'}
+              </button>
             </section>
 
             <section className="section rounded-xl p-4">
